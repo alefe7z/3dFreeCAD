@@ -39,32 +39,52 @@ PROPERTY_GROUP = "ArtCAM"
 
 
 def open(filename):
-    """Create a new document and import the ArtCAM file `filename` into it."""
+    """Create a new document and import the ArtCAM file `filename` into it.
+
+    No document is created if the file cannot be read.
+    """
+    project = read_project(filename)
+    if project is None:
+        return None
     docname = os.path.splitext(os.path.basename(filename))[0]
     document = FreeCAD.newDocument(docname)
     document.Label = docname
-    import_file(filename, document)
+    add_project(project, filename, document)
     return document
 
 
 def insert(filename, docname):
-    """Import the ArtCAM file `filename` into the document `docname`, creating it if needed."""
+    """Import the ArtCAM file `filename` into the document `docname`, creating it if needed.
+
+    No document is created if the file cannot be read.
+    """
+    project = read_project(filename)
+    if project is None:
+        return None
     try:
         document = FreeCAD.getDocument(docname)
     except NameError:
         document = FreeCAD.newDocument(docname)
     FreeCAD.ActiveDocument = document
-    import_file(filename, document)
+    add_project(project, filename, document)
     return document
 
 
 def import_file(filename, document):
     """Import the toolpaths of the ArtCAM file `filename` into `document`.
 
-    Return the group containing the created objects.
+    Return the group containing the created objects, or None if the file cannot be read.
     """
+    project = read_project(filename)
+    if project is None:
+        return None
+    return add_project(project, filename, document)
+
+
+def read_project(filename):
+    """Return the ArtCAM project read from `filename`, or None after reporting the error."""
     try:
-        project = reader.read(filename)
+        return reader.read(filename)
     except (reader.ArtCAMError, CompoundFileError, OSError) as error:
         FreeCAD.Console.PrintError(
             translate("ImportArtCAM", "Cannot read the ArtCAM file {}: {}").format(filename, error)
@@ -72,15 +92,35 @@ def import_file(filename, document):
         )
         return None
 
+
+def add_project(project, filename, document):
+    """Add the toolpaths of `project`, read from `filename`, to `document`.
+
+    Return the group containing the created objects.
+    """
     group = document.addObject("App::DocumentObjectGroup", "ArtCAM")
     group.Label = os.path.splitext(os.path.basename(filename))[0]
 
     for toolpath in project.toolpaths:
+        label = toolpath.name or toolpath.identifier
+        if toolpath.skipped_contours:
+            FreeCAD.Console.PrintWarning(
+                translate(
+                    "ImportArtCAM", "ArtCAM toolpath {}: {} contours could not be read"
+                ).format(label, toolpath.skipped_contours)
+                + "\n"
+            )
         shape = make_shape(toolpath)
         if shape is None:
+            FreeCAD.Console.PrintWarning(
+                translate("ImportArtCAM", "ArtCAM toolpath {} has no readable geometry").format(
+                    label
+                )
+                + "\n"
+            )
             continue
         feature = document.addObject("Part::Feature", "Toolpath")
-        feature.Label = toolpath.name or toolpath.identifier
+        feature.Label = label
         feature.Shape = shape
         feature.addProperty(
             "App::PropertyString",
@@ -90,14 +130,14 @@ def import_file(filename, document):
         )
         feature.Tool = toolpath.tool
         group.addObject(feature)
-        if toolpath.skipped_contours:
-            FreeCAD.Console.PrintWarning(
-                translate(
-                    "ImportArtCAM", "ArtCAM toolpath {}: {} contours could not be read"
-                ).format(feature.Label, toolpath.skipped_contours)
-                + "\n"
-            )
 
+    if not group.Group:
+        FreeCAD.Console.PrintWarning(
+            translate(
+                "ImportArtCAM", "The ArtCAM file {} has no readable toolpath geometry"
+            ).format(filename)
+            + "\n"
+        )
     if project.has_vectors:
         FreeCAD.Console.PrintMessage(
             translate(

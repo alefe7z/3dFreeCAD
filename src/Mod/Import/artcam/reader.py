@@ -265,7 +265,13 @@ def parse_contour(data, offset):
             bulge, _arc_tolerance = struct.unpack_from("<2d", data, offset)
             offset += 16
         elif span_type == SPAN_START:
+            # A start span marks the first point of an open contour: both points coincide and
+            # an integer 1 follows. It carries no geometry.
+            (marker,) = struct.unpack_from("<i", data, offset)
             offset += 4
+            if marker != 1 or (x1, y1) != (x2, y2):
+                raise ValueError("Invalid start span")
+            continue
         elif span_type != SPAN_LINE:
             raise ValueError(f"Unknown span type {span_type}")
         values = (x1, y1, x2, y2, bulge)

@@ -23,10 +23,12 @@
 
 import math
 import os
+import struct
 
+import FreeCAD
 import importArtCAM
 from artcam import reader
-from artcam.cfb import CompoundFileError
+from artcam.cfb import CompoundFile, CompoundFileError
 from importtests import artcam_fixture
 from importtests.TestImportBase import TestImportBase
 
@@ -64,6 +66,45 @@ class TestImportArtCAM(TestImportBase):
         # The zero-length start span of the open contour is not kept.
         self.assertFalse(engrave.contours[0].closed)
         self.assertEqual(len(engrave.contours[0].spans), 2)
+
+    def test_read_version_4_container(self):
+        """Read a container with 4096 byte sectors, whose sector 0 follows a padded header."""
+        filename = os.path.join(self.temp_dir, "version4.art")
+        artcam_fixture.write_project(filename, version=4)
+
+        project = reader.read(filename)
+
+        self.assertEqual([toolpath.name for toolpath in project.toolpaths], ["Profile", "Engrave"])
+        length = sum(span.length() for span in project.toolpaths[0].contours[0].spans)
+        self.assertAlmostEqual(length, PROFILE_LENGTH)
+
+    def test_read_deeply_nested_storages(self):
+        """Storage nesting deeper than the Python recursion limit is read without recursion."""
+        path = ("Storage",) * 1100 + ("Stream",)
+        container = CompoundFile(artcam_fixture.build_compound_file({path: b"content"}))
+
+        self.assertEqual(container.list_streams(), [path])
+        self.assertEqual(container.read_stream(path), b"content")
+
+    def test_reject_invalid_start_spans(self):
+        """A start span must be a single point followed by its marker, and adds no geometry."""
+        line = artcam_fixture.line((0.0, 0.0), (10.0, 0.0))
+        valid = artcam_fixture.start_span((0.0, 0.0))
+        moved = struct.pack("<ii4di", 0, 13, 0.0, 0.0, 5.0, 0.0, 1)
+        truncated = valid[:-4]
+
+        contours, skipped = reader.parse_contours(artcam_fixture.contour(False, [valid, line], 1))
+        self.assertEqual((len(contours), skipped), (1, 0))
+        self.assertEqual(len(contours[0].spans), 1)
+
+        contours, skipped = reader.parse_contours(artcam_fixture.contour(False, [moved, line], 1))
+        self.assertEqual((len(contours), skipped), (0, 1))
+
+        # The record ends inside the start span, so its marker is missing.
+        contours, skipped = reader.parse_contours(
+            artcam_fixture.contour(False, [line, truncated], 1)
+        )
+        self.assertEqual((len(contours), skipped), (0, 1))
 
     def test_arc_midpoint(self):
         """A clockwise quarter arc bulges away from the corner center."""
@@ -121,3 +162,15 @@ class TestImportArtCAM(TestImportBase):
             reader.read(filename)
         self.assertIsNone(importArtCAM.import_file(filename, self.document))
         self.assertEqual(self.document.Objects, [])
+
+    def test_invalid_file_creates_no_document(self):
+        """Opening or inserting an unreadable file leaves no new document behind."""
+        filename = os.path.join(self.temp_dir, "invalid.art")
+        with open(filename, "wb") as file:
+            file.write(b"not an ArtCAM project" * 50)
+        documents = set(FreeCAD.listDocuments())
+
+        self.assertIsNone(importArtCAM.open(filename))
+        self.assertIsNone(importArtCAM.insert(filename, "TestImportArtCAMMissing"))
+
+        self.assertEqual(set(FreeCAD.listDocuments()), documents)

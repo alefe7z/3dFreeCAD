@@ -100,3 +100,92 @@ Restrições: não decodificar VectorDocument (README §1 regra 6); não incluir
 em commits, patches ou serviços externos; não abrir PR nem comentar no GitHub.
 Resposta esperada: entradas FINDING/REQUEST/DONE neste LOG (diretamente ou via humano), cada
 achado com arquivo:linha, cenário de falha e correção sugerida.
+
+### 0008 — NOTE — agent-GPT — 2026-11-24T12:21Z
+(Repassada pelo humano; resumida por agent-A. Texto original com o humano.)
+Tarefa: revisão solicitada na entrada 0007
+Estado do git: claude/quirky-ptolemy-fuz2pi @ 41b2fe49, checkout local limpo
+Resumo: Codex (GPT-6) revisou o importador, o diff contra eb5cc45b e a cobertura de testes.
+Limitações: o relógio UTC do ambiente dele marcava 12:21Z, antes da entrada 0007; vale a ordem
+do LOG.
+
+### 0009 — FINDING — agent-GPT — 2026-11-24T12:21Z
+Tarefa: revisão de contornos, CFB e integração FreeCAD
+Resumo: quatro falhas reproduzidas e uma lacuna de diagnóstico:
+  F1 reader.py:267-275: span tipo 13 sem os 4 bytes finais é aceito (offset 84 para registro
+     de 80 B); tipo 13 com início≠fim vira linha. Correção: ler e validar o int (=1) e
+     início==fim; não gerar geometria.
+  F2 cfb.py:101-105: CFB v4 (setor de 4096) falha com "Broken sector chain"; o setor 0 é
+     calculado em 512. Correção: (sector + 1) * sector_size; fixtures v3 e v4.
+  F3 cfb.py:171-185: ~1100 níveis de storage causam RecursionError. Correção: pilha
+     iterativa (entry_id, parent).
+  F4 importArtCAM.py:41-58, 66-73: open() com .art inválido deixa um documento vazio aberto
+     (reproduzido no FreeCAD 1.0.0); insert() cria o documento antes de validar.
+  F5 importArtCAM.py:78-99: se todos os contornos de um percurso são descartados, o aviso é
+     pulado; se nenhum percurso gera geometria, nada é informado.
+  Extra: o DIFAT em cfb.py:111-123 confia na contagem do cabeçalho; registrar visitados e
+     limitar ao número de setores físicos.
+
+### 0010 — FINDING — agent-GPT — 2026-11-24T12:21Z
+Tarefa: T8 e comparação de leitores (amostra 2008.151, offsets relativos ao stream)
+  Preview: u8@0x00=1; u32@0x01,0x05=120×120; pixels a partir de 0x09, 4 B/pixel; o 4º byte é 0
+     em todos os 14.400 pixels; BGRX gera miniatura legível (tratar como alfa = transparente).
+  Models/Model1/Parameters (63 B): <HH@0x04,0x06 = 4000,4000; <dd@0x09,0x11 = 400.0,400.0;
+     coincide com Relief1. Candidatos; conferir com um modelo retangular.
+  Relief1 e ReliefLayer1/Relief: marcador 0x1A@0x1CF; assinatura final 87 65 43 21@0x226AC.
+     Não interpretar ainda como matriz de alturas.
+  OA_TOOLPATH_MANAGER: MaximumDepth (UTF-16LE)@0x4FC, ToolFinishZ@0xFAA; resolver a
+     serialização de objetos antes de associar valores.
+
+### 0011 — DONE — agent-GPT — 2026-11-24T12:21Z
+Tarefa: T1 (validação dos testes existentes)
+Resumo: os 5 testes de TestImportArtCAM passaram no FreeCAD 1.0.0 real ("Ran 5 tests … OK").
+Arcos com bulge ±1 e ±2: ponto médio e comprimento conferem com as arestas do FreeCAD;
+Part.Wire desconectado levanta Part.OCCError (o fallback está correto).
+Pendente: build do fork, fluxo pelo menu, ArtCAM 2013.
+
+### 0012 — CLAIM — agent-A — 2026-11-24T13:20Z
+Tarefa: correções de 0009 (F1–F5 + DIFAT) e documentação de 0010
+Arquivos: src/Mod/Import/artcam/cfb.py, src/Mod/Import/artcam/reader.py,
+src/Mod/Import/importArtCAM.py, src/Mod/Import/importtests/TestImportArtCAM.py,
+src/Mod/Import/importtests/artcam_fixture.py, artcam-handoff/README.md, artcam-handoff/LOG.md
+Estado do git: claude/quirky-ptolemy-fuz2pi @ 41b2fe49
+
+### 0013 — DONE — agent-A — 2026-11-24T13:50Z
+Tarefa: correções de 0009 (F1–F5 + DIFAT) e documentação de 0010
+Arquivos: src/Mod/Import/artcam/cfb.py, src/Mod/Import/artcam/reader.py,
+src/Mod/Import/importArtCAM.py, src/Mod/Import/importtests/TestImportArtCAM.py,
+src/Mod/Import/importtests/artcam_fixture.py, artcam-handoff/README.md, artcam-handoff/LOG.md
+Estado do git: claude/quirky-ptolemy-fuz2pi; base 41b2fe49 (commit desta entrada logo depois)
+Resumo: todos os achados de 0009 confirmados e corrigidos:
+  F1 reader.parse_contour: span tipo 13 lê o marcador com unpack_from (registro truncado →
+     struct.error → contorno descartado e contado); exige marcador == 1 e início == fim;
+     não gera geometria (continue).
+  F2 cfb._sector: início do setor = (sector + 1) * sector_size (v3 e v4).
+  F3 cfb._collect_paths: uma pilha iterativa de (entry_id, parent), sem recursão; visitados
+     compartilhados.
+  DIFAT: limitado ao número de setores físicos; revisita → CompoundFileError.
+  F4 importArtCAM: novo read_project(); open() e insert() leem e validam ANTES de criar ou
+     ativar documento; retornam None em falha. import_file() mantém o contrato.
+     add_project() contém a criação dos objetos.
+  F5 add_project: o aviso de contornos ilegíveis sai antes do continue; novo aviso "toolpath X
+     has no readable geometry"; novo aviso quando o arquivo não gera nenhum percurso.
+  Fixture: build_compound_file(streams, version=3|4), write_project(filename, version).
+  README §4, §5.1, §5.5, §5.6, §5.7, §5.8, novas §5.10 e §5.11 com os achados de 0010.
+Evidência:
+  - As amostras do usuário dão resultados idênticos aos de antes (Prod_Mag_3mm: 9 percursos,
+    4149 contornos, 30757 spans, 1 ilegível; Magnesio_5mm: 10, 1195, 11234, 0). A validação
+    do tipo 13 não descartou nada real.
+  - cfb == olefile byte a byte nas amostras; fixture v4 lido pelo olefile (setor de 4096).
+  - Os 3 testes novos rodados contra o código de 41b2fe49: v4 → "Broken sector chain",
+    aninhamento → RecursionError, tipo 13 → asserção falha. Com as correções: OK.
+Testes: com stubs, OK: test_read_project, test_read_version_4_container,
+  test_read_deeply_nested_storages, test_reject_invalid_start_spans, test_arc_midpoint.
+  NÃO executados aqui (sem FreeCAD): test_import_toolpaths, test_insert_into_existing_document,
+  test_reject_invalid_file, test_invalid_file_creates_no_document (novo, cobre F4).
+  black e pyflakes limpos.
+Limitações / riscos: o comportamento de F5 (avisos) não tem teste automatizado. Nenhum .art
+  v4 real foi visto.
+Próximo passo: agent-GPT roda `TestImportArtCAM` completo (10 testes) no FreeCAD 1.0.0 e
+  registra o resultado. Pendências: T2 (amostras 2013), T3, T4, T8 (Preview BGRX).
+Libera claim: 0012

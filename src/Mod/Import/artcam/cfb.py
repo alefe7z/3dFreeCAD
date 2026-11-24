@@ -89,8 +89,7 @@ class CompoundFile:
         self._mini_stream = self._read_chain(root["start"])[: root["size"]]
         self._mini_fat = self._to_sector_list(self._read_chain(first_mini_fat_sector))
         self._paths = {}
-        self._visited = set()
-        self._collect_paths(root["child"], ())
+        self._collect_paths(root["child"])
 
     @classmethod
     def from_file(cls, filename):
@@ -99,7 +98,8 @@ class CompoundFile:
             return cls(file.read())
 
     def _sector(self, sector):
-        start = HEADER_SIZE + sector * self._sector_size
+        # The header fills sector -1: 512 bytes in version 3, 4096 bytes (zero padded) in version 4.
+        start = (sector + 1) * self._sector_size
         if sector > MAX_REGULAR_SECTOR or start + self._sector_size > len(self._data):
             raise CompoundFileError(f"Sector {sector} is outside the file")
         return self._data[start : start + self._sector_size]
@@ -111,9 +111,16 @@ class CompoundFile:
     def _read_fat(self, fat_sector_count, difat_sector, difat_sector_count):
         difat = list(struct.unpack_from(f"<{HEADER_DIFAT_ENTRIES}I", self._data, 0x4C))
         entries_per_sector = self._sector_size // 4 - 1
-        for _ in range(difat_sector_count):
+        # The declared count cannot exceed the sectors present in the file, and a DIFAT chain
+        # that revisits a sector is malformed.
+        physical_sectors = len(self._data) // self._sector_size - 1
+        visited = set()
+        for _ in range(min(difat_sector_count, physical_sectors)):
             if difat_sector > MAX_REGULAR_SECTOR:
                 break
+            if difat_sector in visited:
+                raise CompoundFileError("Broken DIFAT chain")
+            visited.add(difat_sector)
             sector = self._to_sector_list(self._sector(difat_sector))
             difat.extend(sector[:entries_per_sector])
             difat_sector = sector[entries_per_sector]
@@ -168,21 +175,26 @@ class CompoundFile:
             )
         return entries
 
-    def _collect_paths(self, entry_id, parent):
-        """Record the path of each entry in the sibling tree rooted at `entry_id`."""
-        pending = [entry_id]
+    def _collect_paths(self, root_child):
+        """Record the path of every entry below the root storage.
+
+        A single explicit stack covers siblings and children, so deep storage nesting cannot
+        exhaust the Python call stack, and the visited set stops malformed trees that loop.
+        """
+        pending = [(root_child, ())]
+        visited = set()
         while pending:
-            entry_id = pending.pop()
-            # The visited set is shared by all storages, so a malformed tree cannot loop.
-            if entry_id == NO_STREAM or entry_id in self._visited or entry_id >= len(self._entries):
+            entry_id, parent = pending.pop()
+            if entry_id == NO_STREAM or entry_id in visited or entry_id >= len(self._entries):
                 continue
-            self._visited.add(entry_id)
+            visited.add(entry_id)
             entry = self._entries[entry_id]
             path = parent + (entry["name"],)
             self._paths[path] = entry_id
-            pending.extend((entry["left"], entry["right"]))
+            pending.append((entry["left"], parent))
+            pending.append((entry["right"], parent))
             if entry["type"] == TYPE_STORAGE:
-                self._collect_paths(entry["child"], path)
+                pending.append((entry["child"], path))
 
     def list_streams(self):
         """Return the paths of all streams, sorted."""

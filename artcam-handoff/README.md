@@ -106,13 +106,15 @@ as linhas são trajetórias do centro da ferramenta.
   "Referencia" do `Prod_Mag_3mm`, erro de preâmbulo). Geometria renderizada e conferida
   visualmente (logo "BRONX", grades 3×3 e 4×5, hachuras de desbaste).
 - Fixture validado com `olefile` e com o reader (perímetro 44 + 4π mm; ponto médio do arco correto).
-- `test_read_project` e `test_arc_midpoint` passaram com stubs de `FreeCAD`/`Part`.
+- Os 5 testes originais passaram no **FreeCAD 1.0.0 real** (agent-GPT, LOG 0011).
+- Correções da revisão (LOG 0009) com testes de regressão (LOG 0013): os 5 testes do reader
+  passam com stubs; os 3 novos falham no código antigo. `test_invalid_file_creates_no_document`
+  e os testes do importador **precisam ser rodados de novo no FreeCAD real**.
 - `black` e `pyflakes` limpos.
 
 **Não verificado (bloqueado):**
-- `test_import_toolpaths`, `test_insert_into_existing_document`, `test_reject_invalid_file`
-  exigem FreeCAD real. Não há FreeCAD no contêiner; o download via micromamba foi **negado pela
-  política de permissões**. FreeCAD não foi compilado.
+- O contêiner do agent-A não tem FreeCAD (download negado pela política). Testes com FreeCAD
+  ficam com agent-GPT ou com o humano. FreeCAD não foi compilado; menu Arquivo → Abrir não testado.
 - Arquivos do **ArtCAM 2013**: nenhuma amostra disponível.
 - Commit/push: feitos depois da autorização do humano (LOG 0006). Novos commits continuam
   exigindo pedido explícito dele.
@@ -137,7 +139,7 @@ SummaryInformation                         metadados OLE (app "ArtCAM Pro")
 ArtCAM/VersionInfo/VersionA                versão
 ArtCAM/Models/Model1/VectorDocument        VETORES — CIFRADO (não ler)
 ArtCAM/Models/Model1/VectorLayers          nomes das camadas (UTF-16, ex. "Camada 1")
-ArtCAM/Models/Model1/Parameters            63 B, tamanho do modelo (não decodificado)
+ArtCAM/Models/Model1/Parameters            63 B, tamanho do modelo (candidatos, ver 5.10)
 ArtCAM/Models/Model1/Preview               miniatura
 ArtCAM/Models/Model1/ImageManager/Image1/* imagem de cor (ImageData 192001 B)
 ArtCAM/Models/Model1/{Lights,Material}Shading, ValueList, NotesText, ModelUuid, View0/*
@@ -203,7 +205,7 @@ i a               1 para arco, 0 para linha (não usado)
 i type            0 = linha, 2 = arco, 13 = span inicial (ponto, comprimento zero)
 d x1, d y1, d x2, d y2
 type 2:  d bulge, d tol(1e-4)
-type 13: 4 bytes extras (i 1)
+type 13: i 1 (marcador); exige início == fim; não gera geometria (validado desde LOG 0013)
 ```
 
 `bulge = tan(θ/4)`, convenção DXF: positivo = anti-horário. Ponto médio do arco:
@@ -233,15 +235,18 @@ Cabeçalho de texto (latin-1, linhas CRLF):
   Maximum height range which can be represented in the relief is +/- 1.000mm
 ```
 
-Depois vem uma linha numérica ("400.000000 400.0000000.000000 … 32767.000000 (-200…"), seguida
+Marcador `0x1A`@0x1CF; assinatura final `87 65 43 21` (ex. @0x226AC) — LOG 0010. Depois do
+cabeçalho vem uma linha numérica ("400.000000 400.0000000.000000 … 32767.000000 (-200…"), seguida
 de dados binários de baixa entropia (provavelmente comprimidos ou RLE) que terminam em
 `87 65 43 21`. **Formato dos dados de altura desconhecido:** as duas amostras têm relevo plano.
 O valor 32767 sugere alturas em int16 escaladas por "height range".
 
 ### 5.7 `Preview`
 
-`B 1`, `I largura(120)`, `I altura(120)`, depois `largura×altura×4` bytes (57609 = 1+8+57600).
-Provavelmente BGRA/BGRX. Não confirmado.
+`B 1`@0x00, `I largura(120)`@0x01, `I altura(120)`@0x05, pixels a partir de 0x09,
+`largura×altura×4` bytes (57609 = 1+8+57600). **BGRX** (confirmado por agent-GPT, LOG 0010): o 4º
+byte é 0 em todos os pixels; tratá-lo como alfa deixaria a imagem transparente. Validar o tamanho
+`9 + l×a×4`. Ordem dos canais a confirmar com um fixture colorido.
 
 ### 5.8 `OA_TOOLPATH_MANAGER`
 
@@ -249,13 +254,27 @@ Serialização de classes (`OA_ToolpathList`, `OA_ToolpathGroup`, `OA_ProfileToo
 `OA_2DAreaClearanceToolpath`, `OA_Tool`, `tpmDB_SlotDrillTool`, `wuNamedValueList`,
 `wuNamedListNodeDouble/Integer/Bool/String`) com pares nome→valor: `MaximumDepth`,
 `ProfileOutside`, `ClimbMill`, `DoRamping`, `LastPassThickness`, `LeadInOutDistanceMM`,
-`ToolFinishZ`, etc. Registro de classe: `FF FF 01 00 H len nome`. É o melhor candidato para
+`ToolFinishZ`, etc. (ex.: `MaximumDepth`@0x4FC, `ToolFinishZ`@0xFAA, UTF-16LE; LOG 0010).
+Registro de classe: `FF FF 01 00 H len nome`. Não ler um double logo após o nome: resolver
+primeiro a serialização dos objetos. É o melhor candidato para
 **profundidades e parâmetros de corte**. Não decodificado.
 
 ### 5.9 `VectorDocument`
 
 Entropia 7,9997 bits/byte, tamanho múltiplo de 16, sem cabeçalho, não é zlib/lzma/bz2 →
 **cifra de bloco**. Fora de escopo (regra 6).
+
+### 5.10 `Models/Model1/Parameters` (candidatos)
+
+63 B. `<HH`@0x04,0x06 = 4000, 4000 (pixels?); `<dd`@0x09,0x11 = 400.0, 400.0 (mm?). Coincide
+com o Relief1 da mesma amostra (LOG 0010). Modelo quadrado: confirmar a ordem dos eixos com um
+modelo retangular antes de usar.
+
+### 5.11 Contêiner CFB v4
+
+Setores de 4096 B: o cabeçalho ocupa o "setor −1" inteiro (preenchido com zeros), então o setor
+`n` começa em `(n + 1) × 4096`. O leitor suporta v3 e v4 (LOG 0013). Ainda não vimos um `.art`
+v4 real.
 
 ---
 

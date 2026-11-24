@@ -29,7 +29,6 @@ stream). This module has no dependency on FreeCAD.
 import math
 import struct
 
-SECTOR_SIZE = 512
 MINI_SECTOR_SIZE = 64
 END_OF_CHAIN = 0xFFFFFFFE
 FREE_SECTOR = 0xFFFFFFFF
@@ -141,8 +140,12 @@ def project_streams():
     }
 
 
-def build_compound_file(streams):
-    """Return a Compound File Binary file containing `streams`, all smaller than 4096 bytes."""
+def build_compound_file(streams, version=3):
+    """Return a Compound File Binary file containing `streams`, all smaller than 4096 bytes.
+
+    Version 3 files use 512 byte sectors, version 4 files 4096 byte sectors.
+    """
+    sector_size = {3: 512, 4: 4096}[version]
     # Directory entries: the root, then each storage and stream, in path order.
     entries = [{"name": "Root Entry", "type": 5, "children": []}]
     index = {(): 0}
@@ -171,14 +174,14 @@ def build_compound_file(streams):
         mini_stream += data.ljust(sectors * MINI_SECTOR_SIZE, b"\0")
 
     def sector_count(size):
-        return max(1, -(-size // SECTOR_SIZE))
+        return max(1, -(-size // sector_size))
 
     directory_sectors = sector_count(len(entries) * 128)
     mini_fat_sectors = sector_count(len(mini_fat) * 4)
     mini_stream_sectors = sector_count(len(mini_stream))
     content_sectors = directory_sectors + mini_fat_sectors + mini_stream_sectors
     fat_sectors = 1
-    while fat_sectors * SECTOR_SIZE // 4 < fat_sectors + content_sectors:
+    while fat_sectors * sector_size // 4 < fat_sectors + content_sectors:
         fat_sectors += 1
 
     # Sector layout: FAT, directory, mini FAT, mini stream.
@@ -189,7 +192,7 @@ def build_compound_file(streams):
         fat.extend(range(len(fat) + 1, len(fat) + count))
         fat.append(END_OF_CHAIN)
     first_directory, first_mini_fat, first_mini_stream = starts
-    fat.extend([FREE_SECTOR] * (fat_sectors * SECTOR_SIZE // 4 - len(fat)))
+    fat.extend([FREE_SECTOR] * (fat_sectors * sector_size // 4 - len(fat)))
 
     entries[0]["start"] = first_mini_stream
     entries[0]["size"] = len(mini_stream)
@@ -217,7 +220,12 @@ def build_compound_file(streams):
         directory += struct.pack("<IQ", entry.get("start", 0), entry.get("size", 0))
 
     header = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\0" * 16
-    header += struct.pack("<HHHHH", 0x3E, 3, 0xFFFE, 9, 6) + b"\0" * 10
+    if fat_sectors > 109:
+        raise ValueError("Files needing DIFAT sectors are not supported")
+    sector_shift = 9 if version == 3 else 12
+    header += struct.pack("<HHHHH", 0x3E, version, 0xFFFE, sector_shift, 6) + b"\0" * 6
+    # Version 3 files must declare zero directory sectors.
+    header += struct.pack("<I", 0 if version == 3 else directory_sectors)
     header += struct.pack(
         "<8I",
         fat_sectors,
@@ -231,11 +239,13 @@ def build_compound_file(streams):
     )
     difat = list(range(fat_sectors)) + [FREE_SECTOR] * (109 - fat_sectors)
     header += struct.pack("<109I", *difat)
+    # A version 4 header is padded with zeros to a full sector.
+    header = header.ljust(sector_size, b"\0")
 
     def padded(data, sectors):
-        return data.ljust(sectors * SECTOR_SIZE, b"\0")
+        return data.ljust(sectors * sector_size, b"\0")
 
-    mini_fat += [FREE_SECTOR] * (mini_fat_sectors * SECTOR_SIZE // 4 - len(mini_fat))
+    mini_fat += [FREE_SECTOR] * (mini_fat_sectors * sector_size // 4 - len(mini_fat))
     return b"".join(
         (
             header,
@@ -247,7 +257,7 @@ def build_compound_file(streams):
     )
 
 
-def write_project(filename):
-    """Write the fixture ArtCAM project to `filename`."""
+def write_project(filename, version=3):
+    """Write the fixture ArtCAM project to `filename`, in a container of the given version."""
     with open(filename, "wb") as file:
-        file.write(build_compound_file(project_streams()))
+        file.write(build_compound_file(project_streams(), version))

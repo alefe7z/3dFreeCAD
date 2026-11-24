@@ -50,7 +50,15 @@ SET(DXF_Plate
 
 set(Import_Scripts
     Init.py
+    importArtCAM.py
     stepZ.py
+)
+
+# Reader for ArtCAM project files, installed into its own subdirectory
+set(artcam_SRCS
+    artcam/__init__.py
+    artcam/cfb.py
+    artcam/reader.py
 )
 
 if(BUILD_GUI)
@@ -63,8 +71,10 @@ list(APPEND Import_Scripts TestImport.py)
 # Test package, installed into its own subdirectory
 set(importtests_SRCS
     importtests/__init__.py
+    importtests/TestImportArtCAM.py
     importtests/TestImportBase.py
     importtests/TestImportDXF.py
+    importtests/artcam_fixture.py
 )
 
 if(BUILD_GUI)
@@ -83,7 +93,7 @@ set(importtests_FIXTURES
 
 
 add_custom_target(ImportScripts ALL
-    SOURCES ${Import_Scripts} ${importtests_SRCS} ${importtests_FIXTURES} ${DXF_Plate}
+    SOURCES ${Import_Scripts} ${artcam_SRCS} ${importtests_SRCS} ${importtests_FIXTURES} ${DXF_Plate}
 )
 
 fc_target_copy_resource(ImportScripts
@@ -91,6 +101,8 @@ fc_target_copy_resource(ImportScripts
     ${CMAKE_BINARY_DIR}/Mod/Import
     ${Import_Scripts}
 )
+
+fc_copy_sources(ImportScripts "${CMAKE_BINARY_DIR}/Mod/Import" ${artcam_SRCS})
 
 # Copy the test package and its fixtures into the build tree
 fc_copy_sources(ImportScripts "${CMAKE_BINARY_DIR}/Mod/Import" ${importtests_SRCS})
@@ -108,6 +120,13 @@ INSTALL(
         #${Import_QRC_SRCS}
     DESTINATION
         Mod/Import
+)
+
+INSTALL(
+    FILES
+        ${artcam_SRCS}
+    DESTINATION
+        Mod/Import/artcam
 )
 
 INSTALL(

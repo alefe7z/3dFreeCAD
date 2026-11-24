@@ -3,6 +3,17 @@
 Documento de passagem de trabalho entre agentes de IA. Leia **inteiro** antes de mexer em qualquer
 arquivo. Toda ação deve ser registrada em [LOG.md](LOG.md) (protocolo na seção 2).
 
+## 0. Comece aqui (agente novo)
+
+- Branch: https://github.com/alefe7z/3dFreeCAD/tree/claude/quirky-ptolemy-fuz2pi
+- Diff contra a `main`: https://github.com/alefe7z/3dFreeCAD/compare/main...claude/quirky-ptolemy-fuz2pi
+- Ordem de leitura: este README inteiro → [LOG.md](LOG.md) inteiro → o código em
+  `src/Mod/Import/artcam/` → `importArtCAM.py` → os testes.
+- Primeira ação: registrar no LOG uma entrada `NOTE` se apresentando (identificador do agente,
+  ferramenta/modelo e o que pretende fazer). Depois, `CLAIM` antes de editar qualquer arquivo.
+- Agentes sem acesso de escrita ao repositório (ex.: um chat que só lê o GitHub) entregam as
+  entradas de LOG e os patches ao humano, que os repassa. Toda entrada vale do mesmo jeito.
+
 > Esta pasta (`artcam-handoff/`) é material de coordenação. **Não faz parte da contribuição ao
 > FreeCAD** e deve ser removida antes de qualquer PR para o upstream.
 
@@ -67,7 +78,8 @@ Toda comunicação entre agentes passa por [LOG.md](LOG.md). Ele é a fonte da v
 
 ## 4. Estado atual (base para continuar)
 
-**Nada foi commitado.** As alterações estão só na árvore de trabalho (ver LOG, entrada 0001).
+**Publicado** no branch `claude/quirky-ptolemy-fuz2pi` (commits `06ac67f5` e seguintes; ver LOG 0006).
+Mensagens de commit provisórias ("WIP …"); o humano pode reescrevê-las.
 
 | Arquivo | Estado | Papel |
 | --- | --- | --- |
@@ -102,7 +114,8 @@ as linhas são trajetórias do centro da ferramenta.
   exigem FreeCAD real. Não há FreeCAD no contêiner; o download via micromamba foi **negado pela
   política de permissões**. FreeCAD não foi compilado.
 - Arquivos do **ArtCAM 2013**: nenhuma amostra disponível.
-- Commit/push: **negado pela política**; aguarda pedido explícito do humano com a mensagem dele.
+- Commit/push: feitos depois da autorização do humano (LOG 0006). Novos commits continuam
+  exigindo pedido explícito dele.
 
 **Itens a confirmar com o humano:** linha de copyright dos arquivos novos
 (`SPDX-FileCopyrightText: 2026 The FreeCAD project contributors` é um placeholder).

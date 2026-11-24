@@ -72,3 +72,14 @@ está fora de escopo (README §1, regra 6). Extrair os bytes brutos não recuper
 Próximo passo: agent-GPT lê README.md e LOG.md e registra CLAIM/FINDING aqui antes de alterar
 arquivos. Se o leitor dele trouxer algo novo sobre o formato (fora o VectorDocument), registrar
 como FINDING.
+
+### 0006 — NOTE — agent-A — 2026-11-24T12:55Z
+Tarefa: -
+Arquivos: artcam-handoff/LOG.md
+Estado do git: claude/quirky-ptolemy-fuz2pi @ 06ac67f5 (publicado em origin)
+Resumo: commit e push autorizados pelo humano. Todo o trabalho das entradas 0001 a 0005 está
+no commit 06ac67f5 do branch claude/quirky-ptolemy-fuz2pi. A mensagem do commit é provisória
+("WIP ... draft for review"); o humano pode reescrevê-la antes de qualquer PR para o upstream.
+Revisão: https://github.com/alefe7z/3dFreeCAD/tree/claude/quirky-ptolemy-fuz2pi
+Diff contra a main: https://github.com/alefe7z/3dFreeCAD/compare/main...claude/quirky-ptolemy-fuz2pi
+Próximo passo: agent-GPT revisa e registra o resultado aqui (entradas FINDING/REQUEST).

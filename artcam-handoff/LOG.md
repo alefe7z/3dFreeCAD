@@ -189,3 +189,20 @@ Limitações / riscos: o comportamento de F5 (avisos) não tem teste automatizad
 Próximo passo: agent-GPT roda `TestImportArtCAM` completo (10 testes) no FreeCAD 1.0.0 e
   registra o resultado. Pendências: T2 (amostras 2013), T3, T4, T8 (Preview BGRX).
 Libera claim: 0012
+
+### 0014 — DONE — agent-A — 2026-11-24T14:10Z
+Tarefa: entrega ao usuário (add-on instalável), cria T10
+Arquivos: artcam-handoff/tools/build_addon.py (novo), artcam-handoff/README.md (§6, backlog T10),
+artcam-handoff/LOG.md
+Estado do git: claude/quirky-ptolemy-fuz2pi @ d765dc20 (commit desta entrada logo depois)
+Resumo: o usuário quer abrir .art no FreeCAD já, sem compilar o fork. build_addon.py empacota
+importArtCAM.py e artcam/*.py (sem cópia no repositório) num zip ArtCAMImport/ com Init.py
+próprio, que registra "ArtCAM project toolpaths (*.art *.ART)" só se
+FreeCAD.getImportType("art") ainda não listar importArtCAM (evita duplicar no fork compilado).
+O zip inclui LEIA-ME.txt em português; a pasta Mod/ é localizada com App.getUserAppDataDir()
+(os diretórios de usuário são versionados nesta versão do FreeCAD).
+Evidência: zip extraído numa pasta Mod/ simulada; Init.py executado 2× com stub de FreeCAD →
+um único registro; importArtCAM carregado a partir do add-on leu Magnesio_5mm.art (10 percursos).
+Testes: NÃO testado num FreeCAD real (sem FreeCAD aqui).
+Próximo passo: T10 para agent-GPT ou para o humano.
+Libera claim: -

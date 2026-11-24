@@ -311,7 +311,14 @@ Inspecionar um `.art` e gerar uma prévia SVG (ferramenta desta pasta):
 python3 artcam-handoff/tools/artcam_inspect.py caminho/arquivo.art --svg saida.svg
 ```
 
-Teste manual em um FreeCAD 1.x instalado: copiar `artcam/` e `importArtCAM.py` para
+Add-on para um FreeCAD 1.x instalado, sem compilar (gera `ArtCAMImport.zip` a partir do
+código deste branch; instruções de instalação no `LEIA-ME.txt` dentro do zip):
+
+```bash
+python3 artcam-handoff/tools/build_addon.py ArtCAMImport.zip
+```
+
+Teste manual alternativo em um FreeCAD 1.x instalado: copiar `artcam/` e `importArtCAM.py` para
 `<FreeCAD>/Mod/Import/` e, no console Python, rodar
 `import importArtCAM; importArtCAM.open(r"caminho\arquivo.art")`.
 
@@ -335,6 +342,7 @@ black --line-length 100 src/Mod/Import/artcam src/Mod/Import/importArtCAM.py src
 | T6 | Investigar o contorno ilegível ("Referencia", erro de preâmbulo) | `reader.py` | amostra `Prod_Mag_3mm` | baixa |
 | T7 | Opção de recuperar o vetor de projeto aproximado via offset pelo raio da ferramenta (raio extraído do nome/`OA_Tool`) | `importArtCAM.py` | T3 (parâmetros da ferramenta) | baixa |
 | T8 | Importar a miniatura `Preview` (ex. como imagem no documento) | `reader.py`, `importArtCAM.py` | — | baixa |
+| T10 | Validar o add-on (`tools/build_addon.py`) num FreeCAD 1.0/1.1 real: instalar em `Mod/`, conferir que `.art` aparece em Arquivo → Abrir/Importar e que abre as amostras | — (só teste) | FreeCAD real | alta |
 | T9 | Preparação para o upstream: revisão final, remover `artcam-handoff/`, confirmar copyright, divulgação de IA (AI_POLICY) | vários | humano | — (só com o humano) |
 
 Regras do backlog: tarefas com dependência de amostra ou de decisão só começam depois que o
